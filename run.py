@@ -3,13 +3,16 @@ import numpy as np
 import socket
 import picamera
 import sys
+from http import client
+
+SERVER_ADDR = '169.254.207.183'
 
 class MotionOutput(picamera.array.PiMotionAnalysis):
-    def __init__(self, camera, socket):
+    def __init__(self, camera, http_conn):
         super(MotionOutput, self).__init__(camera)
         self.camera = camera
         self.motion = 0
-        self.sock = socket
+        self.conn = http_conn
         self.target_port = 7000
     
     def analyze(self, a):
@@ -18,12 +21,13 @@ class MotionOutput(picamera.array.PiMotionAnalysis):
             np.square(a['y'].astype(np.float))
         ).clip(0, 255).astype(np.uint8)
 
-        if (a > 60).sum() > 10:
+        if (a > 80).sum() > 10:
             self.motion += 1
-            self.sock.sendall(b'motion')
-            # print('Motion detected! %d' % self.motion)
+            self.conn.request("POST", "/intrusion_event")
+            self.conn.getresponse()
+            print('Motion detected! %d' % self.motion)
 
-MACBOOK_ADDR = '169.254.207.183'
+
             
 class VideoOutput(object):
     def __init__(self, socket):
@@ -42,14 +46,13 @@ camera.resolution = (640, 480)
 camera.framerate = 30
 
 video_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-motion_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+http_conn = client.HTTPConnection(SERVER_ADDR, 7000)
 
 video_socket.connect((MACBOOK_ADDR, 8000))
-motion_socket.connect((MACBOOK_ADDR, 7000))
 
 try:
     camera.start_preview()
-    camera.start_recording(VideoOutput(video_socket), format='h264', motion_output=MotionOutput(camera, motion_socket))
+    camera.start_recording(VideoOutput(video_socket), format='h264', motion_output=MotionOutput(camera))
     while True:
         camera.wait_recording(5)
     camera.stop_recording()
