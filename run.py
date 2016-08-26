@@ -8,12 +8,10 @@ from http import client
 SERVER_ADDR = '169.254.207.183'
 
 class MotionOutput(picamera.array.PiMotionAnalysis):
-    def __init__(self, camera, http_conn):
+    def __init__(self, camera):
         super(MotionOutput, self).__init__(camera)
         self.camera = camera
         self.motion = 0
-        self.conn = http_conn
-        self.target_port = 7000
     
     def analyze(self, a):
         a = np.sqrt(
@@ -23,8 +21,9 @@ class MotionOutput(picamera.array.PiMotionAnalysis):
 
         if (a > 80).sum() > 10:
             self.motion += 1
-            self.conn.request("POST", "/intrusion_event")
-            self.conn.getresponse()
+            conn = client.HTTPSConnection(SERVER_ADDR, 7000)
+            conn.request("POST", "/intrusion_event")
+            conn.getresponse()
             print('Motion detected! %d' % self.motion)
 
 
@@ -32,7 +31,6 @@ class MotionOutput(picamera.array.PiMotionAnalysis):
 class VideoOutput(object):
     def __init__(self, socket):
         self.sock = socket
-        self.target_port = 8000
 
     def write(self, data):
         self.sock.sendall(data)
@@ -46,7 +44,7 @@ camera.resolution = (640, 480)
 camera.framerate = 30
 
 video_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-http_conn = client.HTTPConnection(SERVER_ADDR, 7000)
+
 
 video_socket.connect((MACBOOK_ADDR, 8000))
 
@@ -61,7 +59,6 @@ except:
     print("Connection reset by peer")
 finally:
     video_socket.close()
-    motion_socket.close()
     camera.close()
     sys.exit(0)
         
